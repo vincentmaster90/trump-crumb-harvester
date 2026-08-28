@@ -10,6 +10,7 @@ const ASSETS = {
   TRUMP: { pair: 'TRUMPUSD', label: 'TRUMP / USD' },
   SOL: { pair: 'SOLUSD', label: 'SOL / USD' },
   BTC: { pair: 'XBTUSD', label: 'BTC / USD' },
+  ETH: { pair: 'ETHUSD', label: 'ETH / USD' },
   PAXG: { pair: 'PAXGUSD', label: 'PAXG / USD' }
 };
 
@@ -44,7 +45,6 @@ function loadState() {
         for (const s of Object.keys(ASSETS)) bots[s] = { ...freshBot(s), ...(saved.bots[s] || {}) };
         return { bots };
       }
-      // migrate previous single-TRUMP state
       const trump = { ...freshBot('TRUMP'), ...saved, symbol: 'TRUMP', pair: ASSETS.TRUMP.pair, label: ASSETS.TRUMP.label };
       return { bots: { ...defaults.bots, TRUMP: trump } };
     }
