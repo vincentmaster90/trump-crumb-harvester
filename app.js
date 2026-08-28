@@ -1,160 +1,54 @@
 const $ = (id) => document.getElementById(id);
 let state = null;
-let pollTimer = null;
+const SYMBOLS = ['TRUMP','SOL','BTC','PAXG'];
 
 function money(n) {
-  return new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD', maximumFractionDigits: 2 }).format(Number(n || 0));
+  return new Intl.NumberFormat('en-US', { style:'currency', currency:'USD', maximumFractionDigits:2 }).format(Number(n || 0));
 }
-
 function priceFmt(n) {
   if (!Number.isFinite(Number(n))) return '—';
-  const v = Number(n);
-  const digits = v >= 1 ? 4 : 6;
-  return `$${v.toFixed(digits)}`;
+  const v = Number(n); return `$${v.toLocaleString('en-US',{minimumFractionDigits:v>=100?2:4,maximumFractionDigits:v>=100?2:6})}`;
+}
+function pct(n) { const v=Number(n||0); return `${v>=0?'+':''}${v.toFixed(2)}%`; }
+async function api(path, options={}) {
+  const res = await fetch(path,{cache:'no-store',headers:{'content-type':'application/json',...(options.headers||{})},...options});
+  if(!res.ok) throw new Error(`HTTP ${res.status}`); return res.json();
 }
 
-function pct(n) {
-  const v = Number(n || 0);
-  return `${v >= 0 ? '+' : ''}${v.toFixed(2)}%`;
-}
-
-async function api(path, options = {}) {
-  const res = await fetch(path, {
-    cache: 'no-store',
-    headers: { 'content-type': 'application/json', ...(options.headers || {}) },
-    ...options
-  });
-  if (!res.ok) throw new Error(`HTTP ${res.status}`);
-  return res.json();
-}
-
-function renderHistory() {
-  const body = $('historyBody');
-  if (!state?.history?.length) {
-    body.innerHTML = '<tr class="empty"><td colspan="8">No harvests yet.</td></tr>';
-    return;
-  }
-  body.innerHTML = state.history.slice().reverse().map((h) => `
-    <tr>
-      <td>${h.number}</td>
-      <td>${new Date(h.time).toLocaleString()}</td>
-      <td>${priceFmt(h.entry)}</td>
-      <td>${priceFmt(h.exit)}</td>
-      <td>${money(h.grossProfit)}</td>
-      <td>${money(h.fees)}</td>
-      <td class="positive">${money(h.netBanked)}</td>
-      <td>${money(h.totalBanked)}</td>
-    </tr>
-  `).join('');
+function botCard(b) {
+  return `<article class="panel" id="card-${b.symbol}">
+    <div class="panel-head"><div><p class="eyebrow">${b.label}</p><h2>${b.symbol} Bot</h2></div><span class="badge ${b.running?'on':'off'}">${b.running?'RUNNING':'PAUSED'}</span></div>
+    <div class="grid stats lower">
+      <article class="card accent"><span>Live price</span><strong>${priceFmt(b.currentPrice)}</strong><small>${b.lastError ? b.lastError : 'Kraken live'}</small></article>
+      <article class="card"><span>Cycle entry</span><strong>${priceFmt(b.entryPrice)}</strong><small class="${b.cycleMovePct>0?'positive':b.cycleMovePct<0?'negative':''}">${pct(b.cycleMovePct)}</small></article>
+      <article class="card"><span>Next harvest</span><strong>${priceFmt(b.targetPrice)}</strong><small>+${Number(b.targetPct).toFixed(2)}%</small></article>
+      <article class="card profit"><span>Banked profit</span><strong>${money(b.bankedProfit)}</strong><small>${b.harvestCount} harvests</small></article>
+    </div>
+    <label>Base capital<div class="input-row"><span>$</span><input id="capital-${b.symbol}" type="number" min="1" step="100" value="${b.baseCapital}"></div></label>
+    <label>Harvest target<div class="input-row"><input id="target-${b.symbol}" type="number" min="0.1" step="0.1" value="${b.targetPct}"><span>%</span></div></label>
+    <div class="button-row"><button class="primary" onclick="startBot('${b.symbol}')">Start / Resume</button><button class="secondary" onclick="pauseBot('${b.symbol}')">Pause</button></div>
+    <div class="formula"><strong>Current position</strong><p>${money(b.positionValue)} • Unrealized ${money(b.unrealized)} • Total wealth ${money(b.totalWealth)}</p></div>
+  </article>`;
 }
 
 function render() {
-  if (!state) return;
-
-  $('baseCapital').value = state.baseCapital;
-  $('targetPct').value = state.targetPct;
-  $('feePct').value = state.feePct;
-
-  $('currentPrice').textContent = priceFmt(state.currentPrice);
-  $('entryPrice').textContent = priceFmt(state.entryPrice);
-  $('targetPrice').textContent = priceFmt(state.targetPrice);
-  $('bankedProfit').textContent = money(state.bankedProfit);
-  $('harvestCount').textContent = String(state.harvestCount || 0);
-  $('tokensHeld').textContent = Number(state.tokensHeld || 0).toFixed(6);
-  $('positionValue').textContent = money(state.positionValue);
-  $('totalWealth').textContent = money(state.totalWealth);
-
-  $('unrealizedLabel').textContent = `Unrealized: ${money(state.unrealized)} • ${pct(state.cycleMovePct)}`;
-  $('unrealizedLabel').className = state.cycleMovePct > 0 ? 'positive' : state.cycleMovePct < 0 ? 'negative' : '';
-
-  $('cycleMove').textContent = state.entryPrice ? `Cycle move ${pct(state.cycleMovePct)}` : 'Waiting for first live price';
-  $('cycleMove').className = state.cycleMovePct > 0 ? 'positive' : state.cycleMovePct < 0 ? 'negative' : '';
-
-  if (state.distancePct == null) $('distanceToTarget').textContent = `Target +${Number(state.targetPct).toFixed(2)}%`;
-  else if (state.distancePct <= 0) $('distanceToTarget').textContent = 'Target reached';
-  else $('distanceToTarget').textContent = `${state.distancePct.toFixed(2)}% to harvest`;
-
-  $('engineBadge').textContent = state.running ? 'RUNNING 24/7' : 'PAUSED';
-  $('engineBadge').className = `badge ${state.running ? 'on' : 'off'}`;
-  $('sourceBadge').textContent = 'KRAKEN LIVE';
-  $('liveDot').className = `dot ${state.lastError ? '' : 'live'}`;
-  $('liveStatus').textContent = state.lastError ? `Kraken error: ${state.lastError}` : 'Kraken live • server 24/7';
-  $('lastUpdated').textContent = state.lastUpdated ? `Kraken • ${new Date(state.lastUpdated).toLocaleTimeString()}` : 'Connecting to Kraken…';
-
-  $('manualPrice').disabled = true;
-  $('applyPriceBtn').disabled = true;
-  $('liveBtn').disabled = true;
-  $('liveBtn').textContent = 'Kraken server feed active';
-
-  renderHistory();
+  if(!state?.bots) return;
+  $('botsGrid').innerHTML = SYMBOLS.map(s=>botCard(state.bots[s])).join('');
+  $('scoreBody').innerHTML = SYMBOLS.map(s=>{ const b=state.bots[s]; return `<tr><td><strong>${s}</strong></td><td>${priceFmt(b.currentPrice)}</td><td>${money(b.baseCapital)}</td><td>${Number(b.targetPct).toFixed(2)}%</td><td class="${b.cycleMovePct>0?'positive':b.cycleMovePct<0?'negative':''}">${pct(b.cycleMovePct)}</td><td>${b.harvestCount}</td><td class="positive">${money(b.bankedProfit)}</td><td>${money(b.totalWealth)}</td></tr>`; }).join('');
+  const errors = SYMBOLS.filter(s=>state.bots[s].lastError);
+  $('liveDot').className = `dot ${errors.length ? '' : 'live'}`;
+  $('liveStatus').textContent = errors.length ? `Kraken issue: ${errors.join(', ')}` : '4 Kraken feeds live • server 24/7';
 }
 
-async function refreshState() {
-  try {
-    state = await api('/api/state');
-    render();
-  } catch (e) {
-    $('liveDot').className = 'dot';
-    $('liveStatus').textContent = 'Server connection lost';
-    console.error(e);
-  }
+async function refreshState(){ try{ state=await api('/api/state'); render(); }catch(e){ $('liveDot').className='dot'; $('liveStatus').textContent='Server connection lost'; console.error(e); } }
+
+async function startBot(symbol){
+  const baseCapital=Number($(`capital-${symbol}`).value||1000);
+  const targetPct=Number($(`target-${symbol}`).value||2);
+  state=await api('/api/bot',{method:'POST',body:JSON.stringify({symbol,action:'start',baseCapital,targetPct,feePct:0,restart:false})}); render();
 }
+async function pauseBot(symbol){ state=await api('/api/bot',{method:'POST',body:JSON.stringify({symbol,action:'pause'})}); render(); }
+window.startBot=startBot; window.pauseBot=pauseBot;
 
-async function startOrResume() {
-  const baseCapital = Number($('baseCapital').value || 1000);
-  const targetPct = Number($('targetPct').value || 2);
-  const feePct = Number($('feePct').value || 0);
-  state = await api('/api/start', {
-    method: 'POST',
-    body: JSON.stringify({ baseCapital, targetPct, feePct, restart: false })
-  });
-  render();
-}
-
-async function pause() {
-  state = await api('/api/pause', { method: 'POST', body: '{}' });
-  render();
-}
-
-async function resetEverything() {
-  if (!confirm('Reset virtual USD profit, paper position and harvest history?')) return;
-  state = await api('/api/reset', { method: 'POST', body: '{}' });
-  render();
-}
-
-async function refreshNow() {
-  $('refreshBtn').disabled = true;
-  try {
-    state = await api('/api/refresh', { method: 'POST', body: '{}' });
-    render();
-  } finally {
-    $('refreshBtn').disabled = false;
-  }
-}
-
-function exportCsv() {
-  if (!state?.history?.length) return alert('No harvest history yet.');
-  const rows = [
-    ['number','time','entry','exit','gross_profit','fees','net_banked','total_banked'],
-    ...state.history.map(h => [h.number,h.time,h.entry,h.exit,h.grossProfit,h.fees,h.netBanked,h.totalBanked])
-  ];
-  const csv = rows.map(r => r.join(',')).join('\n');
-  const blob = new Blob([csv], { type: 'text/csv;charset=utf-8' });
-  const url = URL.createObjectURL(blob);
-  const a = document.createElement('a');
-  a.href = url;
-  a.download = `trump-paper-harvest-${new Date().toISOString().slice(0,10)}.csv`;
-  a.click();
-  URL.revokeObjectURL(url);
-}
-
-$('startBtn').textContent = 'Start / Resume 24/7';
-$('stopBtn').textContent = 'Pause';
-$('startBtn').addEventListener('click', startOrResume);
-$('stopBtn').addEventListener('click', pause);
-$('resetBtn').addEventListener('click', resetEverything);
-$('refreshBtn').addEventListener('click', refreshNow);
-$('exportBtn').addEventListener('click', exportCsv);
-
-refreshState();
-pollTimer = setInterval(refreshState, 5000);
+$('refreshBtn').addEventListener('click', async()=>{ $('refreshBtn').disabled=true; try{ state=await api('/api/refresh',{method:'POST',body:'{}'}); render(); } finally { $('refreshBtn').disabled=false; } });
+refreshState(); setInterval(refreshState,5000);
