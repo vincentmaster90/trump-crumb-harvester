@@ -1,6 +1,6 @@
 const $ = (id) => document.getElementById(id);
 let state = null;
-const SYMBOLS = ['TRUMP','SOL','BTC','PAXG'];
+const SYMBOLS = ['TRUMP','SOL','BTC','ETH','PAXG'];
 
 function money(n) {
   return new Intl.NumberFormat('en-US', { style:'currency', currency:'USD', maximumFractionDigits:2 }).format(Number(n || 0));
@@ -37,7 +37,7 @@ function render() {
   $('scoreBody').innerHTML = SYMBOLS.map(s=>{ const b=state.bots[s]; return `<tr><td><strong>${s}</strong></td><td>${priceFmt(b.currentPrice)}</td><td>${money(b.baseCapital)}</td><td>${Number(b.targetPct).toFixed(2)}%</td><td class="${b.cycleMovePct>0?'positive':b.cycleMovePct<0?'negative':''}">${pct(b.cycleMovePct)}</td><td>${b.harvestCount}</td><td class="positive">${money(b.bankedProfit)}</td><td>${money(b.totalWealth)}</td></tr>`; }).join('');
   const errors = SYMBOLS.filter(s=>state.bots[s].lastError);
   $('liveDot').className = `dot ${errors.length ? '' : 'live'}`;
-  $('liveStatus').textContent = errors.length ? `Kraken issue: ${errors.join(', ')}` : '4 Kraken feeds live • server 24/7';
+  $('liveStatus').textContent = errors.length ? `Kraken issue: ${errors.join(', ')}` : '5 Kraken feeds live • server 24/7';
 }
 
 async function refreshState(){ try{ state=await api('/api/state'); render(); }catch(e){ $('liveDot').className='dot'; $('liveStatus').textContent='Server connection lost'; console.error(e); } }
