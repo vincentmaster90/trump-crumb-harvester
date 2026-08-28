@@ -3,139 +3,148 @@ const fs = require('fs');
 const path = require('path');
 
 const PORT = process.env.PORT || 3000;
-const STATE_FILE = path.join(__dirname, 'paper-state.json');
+const STATE_FILE = process.env.STATE_FILE || path.join(__dirname, 'paper-state.json');
 const POLL_MS = Math.max(5000, Number(process.env.POLL_MS || 15000));
-const KRAKEN_PAIR = process.env.KRAKEN_PAIR || 'TRUMPUSD';
 
-const defaults = {
-  baseCapital: 1000,
-  targetPct: 2,
-  feePct: 0,
-  currentPrice: null,
-  entryPrice: null,
-  tokensHeld: 0,
-  bankedProfit: 0,
-  harvestCount: 0,
-  running: true,
-  source: 'Kraken public ticker',
-  pair: KRAKEN_PAIR,
-  lastUpdated: null,
-  lastError: null,
-  history: []
+const ASSETS = {
+  TRUMP: { pair: 'TRUMPUSD', label: 'TRUMP / USD' },
+  SOL: { pair: 'SOLUSD', label: 'SOL / USD' },
+  BTC: { pair: 'XBTUSD', label: 'BTC / USD' },
+  PAXG: { pair: 'PAXGUSD', label: 'PAXG / USD' }
 };
+
+function freshBot(symbol) {
+  return {
+    symbol,
+    pair: ASSETS[symbol].pair,
+    label: ASSETS[symbol].label,
+    baseCapital: 1000,
+    targetPct: 2,
+    feePct: 0,
+    currentPrice: null,
+    entryPrice: null,
+    tokensHeld: 0,
+    bankedProfit: 0,
+    harvestCount: 0,
+    running: false,
+    lastUpdated: null,
+    lastError: null,
+    history: []
+  };
+}
+
+const defaults = { bots: Object.fromEntries(Object.keys(ASSETS).map(s => [s, freshBot(s)])) };
 
 function loadState() {
   try {
     if (fs.existsSync(STATE_FILE)) {
-      return { ...defaults, ...JSON.parse(fs.readFileSync(STATE_FILE, 'utf8')) };
+      const saved = JSON.parse(fs.readFileSync(STATE_FILE, 'utf8'));
+      if (saved.bots) {
+        const bots = {};
+        for (const s of Object.keys(ASSETS)) bots[s] = { ...freshBot(s), ...(saved.bots[s] || {}) };
+        return { bots };
+      }
+      // migrate previous single-TRUMP state
+      const trump = { ...freshBot('TRUMP'), ...saved, symbol: 'TRUMP', pair: ASSETS.TRUMP.pair, label: ASSETS.TRUMP.label };
+      return { bots: { ...defaults.bots, TRUMP: trump } };
     }
   } catch (e) {
     console.error('State load failed:', e.message);
   }
-  return { ...defaults };
+  return JSON.parse(JSON.stringify(defaults));
 }
 
 let state = loadState();
 
 function saveState() {
-  try {
-    fs.writeFileSync(STATE_FILE, JSON.stringify(state, null, 2));
-  } catch (e) {
-    console.error('State save failed:', e.message);
-  }
+  try { fs.writeFileSync(STATE_FILE, JSON.stringify(state, null, 2)); }
+  catch (e) { console.error('State save failed:', e.message); }
 }
 
-function targetPrice() {
-  return state.entryPrice ? state.entryPrice * (1 + state.targetPct / 100) : null;
+function targetPrice(bot) {
+  return bot.entryPrice ? bot.entryPrice * (1 + bot.targetPct / 100) : null;
 }
 
-function positionValue() {
-  return state.tokensHeld && state.currentPrice ? state.tokensHeld * state.currentPrice : 0;
+function positionValue(bot) {
+  return bot.tokensHeld && bot.currentPrice ? bot.tokensHeld * bot.currentPrice : 0;
 }
 
-function evaluate() {
-  if (!state.running || !state.currentPrice) return;
-
-  if (!state.entryPrice) {
-    state.entryPrice = state.currentPrice;
-    state.tokensHeld = state.baseCapital / state.entryPrice;
-    saveState();
-    console.log(`Paper cycle started at $${state.entryPrice}`);
+function evaluate(bot) {
+  if (!bot.running || !bot.currentPrice) return;
+  if (!bot.entryPrice) {
+    bot.entryPrice = bot.currentPrice;
+    bot.tokensHeld = bot.baseCapital / bot.entryPrice;
+    console.log(`${bot.symbol} paper cycle started at $${bot.entryPrice}`);
     return;
   }
+  const target = targetPrice(bot);
+  if (bot.currentPrice + Number.EPSILON < target) return;
 
-  const target = targetPrice();
-  if (state.currentPrice + Number.EPSILON < target) return;
-
-  const exitValue = positionValue();
-  const grossProfit = exitValue - state.baseCapital;
-  const buyFee = state.baseCapital * (state.feePct / 100);
-  const sellFee = exitValue * (state.feePct / 100);
-  const fees = buyFee + sellFee;
+  const exitValue = positionValue(bot);
+  const grossProfit = exitValue - bot.baseCapital;
+  const fees = (bot.baseCapital + exitValue) * (bot.feePct / 100);
   const netBanked = grossProfit - fees;
-
-  state.bankedProfit += netBanked;
-  state.harvestCount += 1;
-  state.history.push({
-    number: state.harvestCount,
+  bot.bankedProfit += netBanked;
+  bot.harvestCount += 1;
+  bot.history.push({
+    number: bot.harvestCount,
     time: new Date().toISOString(),
-    entry: state.entryPrice,
-    exit: state.currentPrice,
+    entry: bot.entryPrice,
+    exit: bot.currentPrice,
     grossProfit,
     fees,
     netBanked,
-    totalBanked: state.bankedProfit
+    totalBanked: bot.bankedProfit
   });
-
-  console.log(`Harvest #${state.harvestCount}: banked $${netBanked.toFixed(2)} at $${state.currentPrice}`);
-
-  state.entryPrice = state.currentPrice;
-  state.tokensHeld = state.baseCapital / state.entryPrice;
-  saveState();
+  console.log(`${bot.symbol} harvest #${bot.harvestCount}: $${netBanked.toFixed(2)}`);
+  bot.entryPrice = bot.currentPrice;
+  bot.tokensHeld = bot.baseCapital / bot.entryPrice;
 }
 
-async function fetchKrakenPrice() {
+async function fetchPrice(bot) {
   try {
-    const url = `https://api.kraken.com/0/public/Ticker?pair=${encodeURIComponent(KRAKEN_PAIR)}`;
-    const res = await fetch(url, { headers: { 'user-agent': 'trump-crumb-harvester/1.0' } });
+    const url = `https://api.kraken.com/0/public/Ticker?pair=${encodeURIComponent(bot.pair)}`;
+    const res = await fetch(url, { headers: { 'user-agent': 'crumb-harvester/2.0' } });
     if (!res.ok) throw new Error(`Kraken HTTP ${res.status}`);
     const data = await res.json();
     if (Array.isArray(data.error) && data.error.length) throw new Error(data.error.join(', '));
     const ticker = Object.values(data.result || {})[0];
     const price = Number(ticker?.c?.[0]);
-    if (!Number.isFinite(price) || price <= 0) throw new Error('TRUMP/USD price missing');
-
-    state.currentPrice = price;
-    state.lastUpdated = new Date().toISOString();
-    state.lastError = null;
-    evaluate();
-    saveState();
+    if (!Number.isFinite(price) || price <= 0) throw new Error(`${bot.symbol}/USD price missing`);
+    bot.currentPrice = price;
+    bot.lastUpdated = new Date().toISOString();
+    bot.lastError = null;
+    evaluate(bot);
   } catch (e) {
-    state.lastError = e.message;
-    state.lastUpdated = new Date().toISOString();
-    console.error('Price fetch failed:', e.message);
-    saveState();
+    bot.lastError = e.message;
+    bot.lastUpdated = new Date().toISOString();
+    console.error(`${bot.symbol} price fetch failed:`, e.message);
   }
 }
 
-function publicState() {
-  const pos = positionValue();
-  const cycleMovePct = state.entryPrice && state.currentPrice
-    ? ((state.currentPrice / state.entryPrice) - 1) * 100
-    : 0;
-  const target = targetPrice();
-  const distancePct = target && state.currentPrice
-    ? ((target / state.currentPrice) - 1) * 100
-    : null;
+async function fetchAll() {
+  await Promise.all(Object.values(state.bots).map(fetchPrice));
+  saveState();
+}
+
+function publicBot(bot) {
+  const pos = positionValue(bot);
+  const cycleMovePct = bot.entryPrice && bot.currentPrice ? ((bot.currentPrice / bot.entryPrice) - 1) * 100 : 0;
+  const target = targetPrice(bot);
+  const distancePct = target && bot.currentPrice ? ((target / bot.currentPrice) - 1) * 100 : null;
   return {
-    ...state,
+    ...bot,
     targetPrice: target,
     positionValue: pos,
-    unrealized: state.entryPrice ? pos - state.baseCapital : 0,
+    unrealized: bot.entryPrice ? pos - bot.baseCapital : 0,
     cycleMovePct,
     distancePct,
-    totalWealth: (state.entryPrice ? pos : state.baseCapital) + state.bankedProfit
+    totalWealth: (bot.entryPrice ? pos : bot.baseCapital) + bot.bankedProfit
   };
+}
+
+function publicState() {
+  return { bots: Object.fromEntries(Object.entries(state.bots).map(([s,b]) => [s, publicBot(b)])) };
 }
 
 function sendJson(res, status, obj) {
@@ -148,66 +157,52 @@ function readBody(req) {
   return new Promise((resolve, reject) => {
     let body = '';
     req.on('data', c => body += c);
-    req.on('end', () => {
-      try { resolve(body ? JSON.parse(body) : {}); } catch (e) { reject(e); }
-    });
+    req.on('end', () => { try { resolve(body ? JSON.parse(body) : {}); } catch (e) { reject(e); } });
     req.on('error', reject);
   });
 }
 
-const mime = {
-  '.html': 'text/html; charset=utf-8',
-  '.js': 'text/javascript; charset=utf-8',
-  '.css': 'text/css; charset=utf-8',
-  '.json': 'application/json; charset=utf-8'
-};
+const mime = { '.html':'text/html; charset=utf-8', '.js':'text/javascript; charset=utf-8', '.css':'text/css; charset=utf-8', '.json':'application/json; charset=utf-8' };
 
 const server = http.createServer(async (req, res) => {
   try {
-    if (req.url === '/api/health') return sendJson(res, 200, { ok: true, running: state.running, lastUpdated: state.lastUpdated, lastError: state.lastError });
-    if (req.url === '/api/state' && req.method === 'GET') return sendJson(res, 200, publicState());
+    const url = new URL(req.url, `http://${req.headers.host || 'localhost'}`);
+    if (url.pathname === '/api/health') return sendJson(res, 200, { ok: true, bots: Object.values(state.bots).map(b => ({ symbol:b.symbol, running:b.running, lastUpdated:b.lastUpdated, lastError:b.lastError })) });
+    if (url.pathname === '/api/state' && req.method === 'GET') return sendJson(res, 200, publicState());
 
-    if (req.url === '/api/start' && req.method === 'POST') {
+    if (url.pathname === '/api/bot' && req.method === 'POST') {
       const body = await readBody(req);
-      if (Number(body.baseCapital) > 0) state.baseCapital = Number(body.baseCapital);
-      if (Number(body.targetPct) > 0) state.targetPct = Number(body.targetPct);
-      if (Number(body.feePct) >= 0) state.feePct = Number(body.feePct);
-      if (body.restart === true) {
-        state.entryPrice = state.currentPrice;
-        state.tokensHeld = state.currentPrice ? state.baseCapital / state.currentPrice : 0;
+      const symbol = String(body.symbol || '').toUpperCase();
+      const bot = state.bots[symbol];
+      if (!bot) return sendJson(res, 400, { error: 'Unknown symbol' });
+      if (Number(body.baseCapital) > 0) bot.baseCapital = Number(body.baseCapital);
+      if (Number(body.targetPct) > 0) bot.targetPct = Number(body.targetPct);
+      if (Number(body.feePct) >= 0) bot.feePct = Number(body.feePct);
+      if (body.action === 'start') {
+        if (!bot.running || body.restart === true || !bot.entryPrice) {
+          bot.entryPrice = bot.currentPrice;
+          bot.tokensHeld = bot.currentPrice ? bot.baseCapital / bot.currentPrice : 0;
+        }
+        bot.running = true;
+        evaluate(bot);
+      } else if (body.action === 'pause') bot.running = false;
+      else if (body.action === 'reset') {
+        const price = bot.currentPrice, updated = bot.lastUpdated;
+        state.bots[symbol] = { ...freshBot(symbol), currentPrice: price, lastUpdated: updated };
       }
-      state.running = true;
-      evaluate();
       saveState();
       return sendJson(res, 200, publicState());
     }
 
-    if (req.url === '/api/pause' && req.method === 'POST') {
-      state.running = false;
-      saveState();
+    if (url.pathname === '/api/refresh' && req.method === 'POST') {
+      await fetchAll();
       return sendJson(res, 200, publicState());
     }
 
-    if (req.url === '/api/reset' && req.method === 'POST') {
-      const price = state.currentPrice;
-      const updated = state.lastUpdated;
-      state = { ...defaults, currentPrice: price, lastUpdated: updated, running: false };
-      saveState();
-      return sendJson(res, 200, publicState());
-    }
-
-    if (req.url === '/api/refresh' && req.method === 'POST') {
-      await fetchKrakenPrice();
-      return sendJson(res, 200, publicState());
-    }
-
-    let urlPath = req.url.split('?')[0];
-    if (urlPath === '/') urlPath = '/index.html';
+    let urlPath = url.pathname === '/' ? 'index.html' : url.pathname.replace(/^[/\\]+/, '');
     const safePath = path.normalize(urlPath).replace(/^([.][.][/\\])+/, '');
     const filePath = path.join(__dirname, safePath);
-    if (!filePath.startsWith(__dirname)) {
-      res.writeHead(403); return res.end('Forbidden');
-    }
+    if (!filePath.startsWith(__dirname)) { res.writeHead(403); return res.end('Forbidden'); }
     fs.readFile(filePath, (err, data) => {
       if (err) { res.writeHead(404); return res.end('Not found'); }
       res.writeHead(200, { 'content-type': mime[path.extname(filePath)] || 'application/octet-stream' });
@@ -219,6 +214,6 @@ const server = http.createServer(async (req, res) => {
   }
 });
 
-server.listen(PORT, () => console.log(`TRUMP Crumb Harvester listening on ${PORT}`));
-fetchKrakenPrice();
-setInterval(fetchKrakenPrice, POLL_MS);
+server.listen(PORT, () => console.log(`Multi Crumb Harvester listening on ${PORT}`));
+fetchAll();
+setInterval(fetchAll, POLL_MS);
