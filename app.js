@@ -31,8 +31,27 @@ function botCard(b) {
   </article>`;
 }
 
+function renderTotals() {
+  const bots = SYMBOLS.map(s => state.bots[s]);
+  const totalCapital = bots.reduce((sum,b)=>sum + Number(b.baseCapital || 0),0);
+  const totalBanked = bots.reduce((sum,b)=>sum + Number(b.bankedProfit || 0),0);
+  const totalPositions = bots.reduce((sum,b)=>sum + Number(b.positionValue || 0),0);
+  const totalWealth = bots.reduce((sum,b)=>sum + Number(b.totalWealth || 0),0);
+  const totalHarvests = bots.reduce((sum,b)=>sum + Number(b.harvestCount || 0),0);
+  const totalPnL = totalWealth - totalCapital;
+
+  $('totalCapital').textContent = money(totalCapital);
+  $('totalBanked').textContent = money(totalBanked);
+  $('totalPositions').textContent = money(totalPositions);
+  $('totalWealth').textContent = money(totalWealth);
+  $('totalHarvests').textContent = `${totalHarvests} harvest${totalHarvests === 1 ? '' : 's'}`;
+  $('totalPnL').textContent = `${totalPnL >= 0 ? '+' : ''}${money(totalPnL)} vs base`;
+  $('totalPnL').className = totalPnL > 0 ? 'positive' : totalPnL < 0 ? 'negative' : '';
+}
+
 function render() {
   if(!state?.bots) return;
+  renderTotals();
   $('botsGrid').innerHTML = SYMBOLS.map(s=>botCard(state.bots[s])).join('');
   $('scoreBody').innerHTML = SYMBOLS.map(s=>{ const b=state.bots[s]; return `<tr><td><strong>${s}</strong></td><td>${priceFmt(b.currentPrice)}</td><td>${money(b.baseCapital)}</td><td>${Number(b.targetPct).toFixed(2)}%</td><td class="${b.cycleMovePct>0?'positive':b.cycleMovePct<0?'negative':''}">${pct(b.cycleMovePct)}</td><td>${b.harvestCount}</td><td class="positive">${money(b.bankedProfit)}</td><td>${money(b.totalWealth)}</td></tr>`; }).join('');
   const errors = SYMBOLS.filter(s=>state.bots[s].lastError);
