@@ -1,0 +1,146 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>TRUMP Crumb Harvester</title>
+  <meta name="description" content="A fixed-capital +2% profit harvesting simulator for Official Trump (TRUMP)." />
+  <link rel="stylesheet" href="styles.css" />
+</head>
+<body>
+  <main class="shell">
+    <header class="hero">
+      <div>
+        <p class="eyebrow">TRUMP / USD</p>
+        <h1>Crumb Harvester</h1>
+        <p class="sub">Keep the base capital working. Bank every +2% crumb. Restart the cycle immediately.</p>
+      </div>
+      <div class="status-wrap">
+        <span id="liveDot" class="dot"></span>
+        <span id="liveStatus">Waiting for price</span>
+      </div>
+    </header>
+
+    <section class="grid stats">
+      <article class="card accent">
+        <span>Current TRUMP price</span>
+        <strong id="currentPrice">—</strong>
+        <small id="lastUpdated">Not updated yet</small>
+      </article>
+      <article class="card">
+        <span>Cycle entry</span>
+        <strong id="entryPrice">—</strong>
+        <small id="cycleMove">Start a cycle</small>
+      </article>
+      <article class="card">
+        <span>Next harvest price</span>
+        <strong id="targetPrice">—</strong>
+        <small id="distanceToTarget">Target +2.00%</small>
+      </article>
+      <article class="card profit">
+        <span>Banked profit</span>
+        <strong id="bankedProfit">$0.00</strong>
+        <small>Removed from trading capital</small>
+      </article>
+    </section>
+
+    <section class="grid two">
+      <article class="panel">
+        <div class="panel-head">
+          <div>
+            <p class="eyebrow">Engine</p>
+            <h2>Strategy controls</h2>
+          </div>
+          <span id="engineBadge" class="badge off">STOPPED</span>
+        </div>
+
+        <label>Base capital
+          <div class="input-row"><span>$</span><input id="baseCapital" type="number" min="1" step="100" value="10000" /></div>
+        </label>
+        <label>Harvest target
+          <div class="input-row"><input id="targetPct" type="number" min="0.1" step="0.1" value="2" /><span>%</span></div>
+        </label>
+        <label>Estimated fee per trade side
+          <div class="input-row"><input id="feePct" type="number" min="0" step="0.01" value="0.00" /><span>%</span></div>
+        </label>
+
+        <div class="button-row">
+          <button id="startBtn" class="primary">Start / Restart cycle</button>
+          <button id="stopBtn" class="secondary">Stop</button>
+        </div>
+        <button id="resetBtn" class="danger ghost">Reset everything</button>
+      </article>
+
+      <article class="panel">
+        <div class="panel-head">
+          <div>
+            <p class="eyebrow">Price feed</p>
+            <h2>Live + manual</h2>
+          </div>
+          <span id="sourceBadge" class="badge">MANUAL</span>
+        </div>
+
+        <p class="muted">Live mode requests the Official Trump price from CoinGecko. Manual mode lets you test any price path instantly.</p>
+        <div class="button-row">
+          <button id="liveBtn" class="primary">Use live TRUMP price</button>
+          <button id="refreshBtn" class="secondary">Refresh now</button>
+        </div>
+
+        <label>Manual TRUMP price
+          <div class="input-row"><span>$</span><input id="manualPrice" type="number" min="0.000001" step="0.01" placeholder="e.g. 2.75" /></div>
+        </label>
+        <button id="applyPriceBtn" class="secondary full">Apply manual price</button>
+
+        <div class="formula">
+          <strong>The rule</strong>
+          <p>At target: sell the simulated position, bank the net profit, and immediately re-enter with the same base capital at the current price.</p>
+        </div>
+      </article>
+    </section>
+
+    <section class="grid stats lower">
+      <article class="card">
+        <span>Position value</span>
+        <strong id="positionValue">$0.00</strong>
+        <small id="unrealizedLabel">Unrealized: $0.00</small>
+      </article>
+      <article class="card">
+        <span>TRUMP held</span>
+        <strong id="tokensHeld">0.0000</strong>
+        <small>Simulated quantity</small>
+      </article>
+      <article class="card">
+        <span>Harvests</span>
+        <strong id="harvestCount">0</strong>
+        <small>Completed +target cycles</small>
+      </article>
+      <article class="card">
+        <span>Total wealth</span>
+        <strong id="totalWealth">$10,000.00</strong>
+        <small>Position + banked profit</small>
+      </article>
+    </section>
+
+    <section class="panel log-panel">
+      <div class="panel-head">
+        <div>
+          <p class="eyebrow">Ledger</p>
+          <h2>Harvest history</h2>
+        </div>
+        <button id="exportBtn" class="secondary small">Export CSV</button>
+      </div>
+      <div class="table-wrap">
+        <table>
+          <thead><tr><th>#</th><th>Time</th><th>Entry</th><th>Exit</th><th>Gross profit</th><th>Fees</th><th>Banked</th><th>Total banked</th></tr></thead>
+          <tbody id="historyBody"><tr class="empty"><td colspan="8">No harvests yet.</td></tr></tbody>
+        </table>
+      </div>
+    </section>
+
+    <footer>
+      Simulator only — no exchange connection and no live orders. Crypto prices are volatile; fees, slippage and taxes can materially change results.
+    </footer>
+  </main>
+  <script src="app.js"></script>
+</body>
+</html>
