@@ -1,0 +1,13 @@
+{
+  "name": "trump-crumb-harvester",
+  "version": "1.0.0",
+  "private": true,
+  "description": "24/7 TRUMP paper-trading crumb harvester simulator",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js"
+  },
+  "engines": {
+    "node": ">=18"
+  }
+}
