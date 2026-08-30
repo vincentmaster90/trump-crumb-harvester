@@ -3,37 +3,55 @@ const fs = require('fs');
 const path = require('path');
 
 const PORT = process.env.PORT || 3000;
-const STATE_FILE = process.env.STATE_FILE || path.join(__dirname, 'paper-state.json');
+const STATE_FILE = process.env.STATE_FILE || path.join(__dirname, 'paper-state-15bots.json');
 const POLL_MS = Math.max(5000, Number(process.env.POLL_MS || 15000));
 
 const ASSETS = {
   TRUMP: { pair: 'TRUMPUSD', label: 'TRUMP / USD' },
-  WIF: { pair: 'WIFUSD', label: 'WIF / USD' },
-  PENGU: { pair: 'PENGUUSD', label: 'PENGU / USD' },
-  BONK: { pair: 'BONKUSD', label: 'BONK / USD' }
+  SOL: { pair: 'SOLUSD', label: 'SOL / USD' },
+  BTC: { pair: 'XBTUSD', label: 'BTC / USD' },
+  DOGE: { pair: 'DOGEUSD', label: 'DOGE / USD' },
+  WIF: { pair: 'WIFUSD', label: 'WIF / USD' }
 };
+const TARGETS = [0.5, 1, 2];
 
-function freshBot(symbol) {
+function botId(symbol, targetPct) {
+  return `${symbol}_${String(targetPct).replace('.', '_')}`;
+}
+
+function freshBot(symbol, targetPct) {
   return {
+    id: botId(symbol, targetPct),
     symbol,
     pair: ASSETS[symbol].pair,
     label: ASSETS[symbol].label,
     baseCapital: 1000,
-    targetPct: 2,
+    targetPct,
     feePct: 0,
     currentPrice: null,
     entryPrice: null,
     tokensHeld: 0,
     bankedProfit: 0,
     harvestCount: 0,
-    running: false,
+    running: true,
     lastUpdated: null,
     lastError: null,
     history: []
   };
 }
 
-const defaults = { bots: Object.fromEntries(Object.keys(ASSETS).map(s => [s, freshBot(s)])) };
+function makeDefaults() {
+  const bots = {};
+  for (const symbol of Object.keys(ASSETS)) {
+    for (const target of TARGETS) {
+      const bot = freshBot(symbol, target);
+      bots[bot.id] = bot;
+    }
+  }
+  return { bots };
+}
+
+const defaults = makeDefaults();
 
 function loadState() {
   try {
@@ -41,11 +59,15 @@ function loadState() {
       const saved = JSON.parse(fs.readFileSync(STATE_FILE, 'utf8'));
       if (saved.bots) {
         const bots = {};
-        for (const s of Object.keys(ASSETS)) bots[s] = { ...freshBot(s), ...(saved.bots[s] || {}) };
+        for (const symbol of Object.keys(ASSETS)) {
+          for (const target of TARGETS) {
+            const fresh = freshBot(symbol, target);
+            const previous = saved.bots[fresh.id];
+            bots[fresh.id] = previous ? { ...fresh, ...previous, id: fresh.id, symbol, pair: fresh.pair, label: fresh.label, targetPct: target } : fresh;
+          }
+        }
         return { bots };
       }
-      const trump = { ...freshBot('TRUMP'), ...saved, symbol: 'TRUMP', pair: ASSETS.TRUMP.pair, label: ASSETS.TRUMP.label };
-      return { bots: { ...defaults.bots, TRUMP: trump } };
     }
   } catch (e) {
     console.error('State load failed:', e.message);
@@ -73,7 +95,7 @@ function evaluate(bot) {
   if (!bot.entryPrice) {
     bot.entryPrice = bot.currentPrice;
     bot.tokensHeld = bot.baseCapital / bot.entryPrice;
-    console.log(`${bot.symbol} paper cycle started at $${bot.entryPrice}`);
+    console.log(`${bot.id} paper cycle started at $${bot.entryPrice}`);
     return;
   }
   const target = targetPrice(bot);
@@ -95,34 +117,44 @@ function evaluate(bot) {
     netBanked,
     totalBanked: bot.bankedProfit
   });
-  console.log(`${bot.symbol} harvest #${bot.harvestCount}: $${netBanked.toFixed(2)}`);
+  console.log(`${bot.id} harvest #${bot.harvestCount}: $${netBanked.toFixed(2)}`);
   bot.entryPrice = bot.currentPrice;
   bot.tokensHeld = bot.baseCapital / bot.entryPrice;
 }
 
-async function fetchPrice(bot) {
-  try {
-    const url = `https://api.kraken.com/0/public/Ticker?pair=${encodeURIComponent(bot.pair)}`;
-    const res = await fetch(url, { headers: { 'user-agent': 'crumb-harvester/2.0' } });
-    if (!res.ok) throw new Error(`Kraken HTTP ${res.status}`);
-    const data = await res.json();
-    if (Array.isArray(data.error) && data.error.length) throw new Error(data.error.join(', '));
-    const ticker = Object.values(data.result || {})[0];
-    const price = Number(ticker?.c?.[0]);
-    if (!Number.isFinite(price) || price <= 0) throw new Error(`${bot.symbol}/USD price missing`);
-    bot.currentPrice = price;
-    bot.lastUpdated = new Date().toISOString();
-    bot.lastError = null;
-    evaluate(bot);
-  } catch (e) {
-    bot.lastError = e.message;
-    bot.lastUpdated = new Date().toISOString();
-    console.error(`${bot.symbol} price fetch failed:`, e.message);
-  }
+async function fetchAssetPrice(symbol) {
+  const pair = ASSETS[symbol].pair;
+  const url = `https://api.kraken.com/0/public/Ticker?pair=${encodeURIComponent(pair)}`;
+  const res = await fetch(url, { headers: { 'user-agent': 'crumb-harvester-15/1.0' } });
+  if (!res.ok) throw new Error(`Kraken HTTP ${res.status}`);
+  const data = await res.json();
+  if (Array.isArray(data.error) && data.error.length) throw new Error(data.error.join(', '));
+  const ticker = Object.values(data.result || {})[0];
+  const price = Number(ticker?.c?.[0]);
+  if (!Number.isFinite(price) || price <= 0) throw new Error(`${symbol}/USD price missing`);
+  return price;
 }
 
 async function fetchAll() {
-  await Promise.all(Object.values(state.bots).map(fetchPrice));
+  await Promise.all(Object.keys(ASSETS).map(async symbol => {
+    try {
+      const price = await fetchAssetPrice(symbol);
+      for (const target of TARGETS) {
+        const bot = state.bots[botId(symbol, target)];
+        bot.currentPrice = price;
+        bot.lastUpdated = new Date().toISOString();
+        bot.lastError = null;
+        evaluate(bot);
+      }
+    } catch (e) {
+      for (const target of TARGETS) {
+        const bot = state.bots[botId(symbol, target)];
+        bot.lastError = e.message;
+        bot.lastUpdated = new Date().toISOString();
+      }
+      console.error(`${symbol} price fetch failed:`, e.message);
+    }
+  }));
   saveState();
 }
 
@@ -138,12 +170,17 @@ function publicBot(bot) {
     unrealized: bot.entryPrice ? pos - bot.baseCapital : 0,
     cycleMovePct,
     distancePct,
-    totalWealth: (bot.entryPrice ? pos : bot.baseCapital) + bot.bankedProfit
+    totalWealth: (bot.entryPrice ? pos : bot.baseCapital) + bot.bankedProfit,
+    netResult: (bot.entryPrice ? pos : bot.baseCapital) + bot.bankedProfit - bot.baseCapital
   };
 }
 
 function publicState() {
-  return { bots: Object.fromEntries(Object.entries(state.bots).map(([s,b]) => [s, publicBot(b)])) };
+  return {
+    assets: Object.keys(ASSETS),
+    targets: TARGETS,
+    bots: Object.fromEntries(Object.entries(state.bots).map(([id,b]) => [id, publicBot(b)]))
+  };
 }
 
 function sendJson(res, status, obj) {
@@ -166,16 +203,15 @@ const mime = { '.html':'text/html; charset=utf-8', '.js':'text/javascript; chars
 const server = http.createServer(async (req, res) => {
   try {
     const url = new URL(req.url, `http://${req.headers.host || 'localhost'}`);
-    if (url.pathname === '/api/health') return sendJson(res, 200, { ok: true, bots: Object.values(state.bots).map(b => ({ symbol:b.symbol, running:b.running, lastUpdated:b.lastUpdated, lastError:b.lastError })) });
+    if (url.pathname === '/api/health') return sendJson(res, 200, { ok: true, botCount: Object.keys(state.bots).length, bots: Object.values(state.bots).map(b => ({ id:b.id, running:b.running, lastUpdated:b.lastUpdated, lastError:b.lastError })) });
     if (url.pathname === '/api/state' && req.method === 'GET') return sendJson(res, 200, publicState());
 
     if (url.pathname === '/api/bot' && req.method === 'POST') {
       const body = await readBody(req);
-      const symbol = String(body.symbol || '').toUpperCase();
-      const bot = state.bots[symbol];
-      if (!bot) return sendJson(res, 400, { error: 'Unknown symbol' });
+      const id = String(body.id || '');
+      const bot = state.bots[id];
+      if (!bot) return sendJson(res, 400, { error: 'Unknown bot' });
       if (Number(body.baseCapital) > 0) bot.baseCapital = Number(body.baseCapital);
-      if (Number(body.targetPct) > 0) bot.targetPct = Number(body.targetPct);
       if (Number(body.feePct) >= 0) bot.feePct = Number(body.feePct);
       if (body.action === 'start') {
         if (!bot.running || body.restart === true || !bot.entryPrice) {
@@ -184,10 +220,11 @@ const server = http.createServer(async (req, res) => {
         }
         bot.running = true;
         evaluate(bot);
-      } else if (body.action === 'pause') bot.running = false;
-      else if (body.action === 'reset') {
+      } else if (body.action === 'pause') {
+        bot.running = false;
+      } else if (body.action === 'reset') {
         const price = bot.currentPrice, updated = bot.lastUpdated;
-        state.bots[symbol] = { ...freshBot(symbol), currentPrice: price, lastUpdated: updated };
+        state.bots[id] = { ...freshBot(bot.symbol, bot.targetPct), currentPrice: price, lastUpdated: updated };
       }
       saveState();
       return sendJson(res, 200, publicState());
@@ -213,6 +250,6 @@ const server = http.createServer(async (req, res) => {
   }
 });
 
-server.listen(PORT, () => console.log(`Volatile Crumb Harvester listening on ${PORT}`));
+server.listen(PORT, () => console.log(`15 Bot Harvest Lab listening on ${PORT}`));
 fetchAll();
 setInterval(fetchAll, POLL_MS);
