@@ -1,0 +1,13 @@
+{
+  "name": "15-bot-harvest-lab",
+  "version": "1.0.0",
+  "private": true,
+  "description": "15 bot paper-trading comparison lab",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js"
+  },
+  "engines": {
+    "node": ">=18"
+  }
+}
