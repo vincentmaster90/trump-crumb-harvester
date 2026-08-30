@@ -10,7 +10,7 @@ const LIVE_TRADING=String(process.env.LIVE_TRADING||'false').toLowerCase()==='tr
 const STATE_FILE=process.env.STATE_FILE||path.join(__dirname,'live-state.json');
 
 function fresh(){return{version:1,pair:PAIR,capitalUsd:CAPITAL_USD,targetPct:TARGET_PCT,status:'WAITING_FOR_FUNDING',entryPrice:null,entryVolume:0,remainingVolume:0,pendingProfitUsd:0,harvestedProfitUsd:0,safeToWithdrawUsd:0,withdrawnProfitUsd:0,harvestCount:0,lastPrice:null,lastUpdated:null,lastOrder:null,lastError:null,armed:LIVE_TRADING};}
-function load(){try{if(fs.existsSync(STATE_FILE))return{...fresh(),...JSON.parse(fs.readFileSync(STATE_FILE,'utf8'))};}catch{}return fresh();}
+function load(){try{if(fs.existsSync(STATE_FILE)){const saved=JSON.parse(fs.readFileSync(STATE_FILE,'utf8'));if(saved.pair&&saved.pair!==PAIR){if(Number(saved.remainingVolume||0)>0||saved.entryPrice)throw new Error(`Refusing pair change with open position: ${saved.pair} -> ${PAIR}`);return fresh();}return{...fresh(),...saved,pair:PAIR,capitalUsd:Number(saved.capitalUsd||CAPITAL_USD),targetPct:TARGET_PCT,armed:LIVE_TRADING};}}catch(e){if(String(e.message||'').startsWith('Refusing pair change'))throw e;}return fresh();}
 let state=load();
 function save(){fs.writeFileSync(STATE_FILE,JSON.stringify(state,null,2));}
 function nonce(){return String(Date.now()*1000+Math.floor(Math.random()*1000));}
@@ -32,5 +32,5 @@ async function tick(){try{const [info,price]=await Promise.all([pairInfo(),ticke
 function view(){const targetPrice=state.entryPrice?state.entryPrice*(1+state.targetPct/100):null;return{...state,targetPrice,positionValueUsd:state.remainingVolume&&state.lastPrice?state.remainingVolume*state.lastPrice:0,credentialsConfigured:Boolean(API_KEY&&API_SECRET),liveTrading:LIVE_TRADING};}
 function send(res,code,obj,type='application/json; charset=utf-8'){const body=type.startsWith('application/json')?JSON.stringify(obj):obj;res.writeHead(code,{'content-type':type,'cache-control':'no-store'});res.end(body);}
 const server=http.createServer(async(req,res)=>{const u=new URL(req.url,`http://${req.headers.host}`);if(u.pathname==='/api/state')return send(res,200,view());if(u.pathname==='/api/health')return send(res,200,{ok:true,status:state.status,lastError:state.lastError});if(u.pathname==='/api/kraken-check'){try{await privateCall('Balance');return send(res,200,{connected:true,authenticated:true,readOnlyCheck:true,liveTrading:LIVE_TRADING});}catch(e){return send(res,200,{connected:false,authenticated:false,readOnlyCheck:true,liveTrading:LIVE_TRADING,error:e.message});}}if(u.pathname==='/'){return fs.readFile(path.join(__dirname,'index.html'),'utf8',(e,d)=>e?send(res,500,'Error','text/plain'):send(res,200,d,'text/html; charset=utf-8'));}send(res,404,{error:'Not found'});});
-server.listen(PORT,()=>console.log(`Kraken WIF live pilot listening on ${PORT}; live=${LIVE_TRADING}`));
+server.listen(PORT,()=>console.log(`Kraken live pilot listening on ${PORT}; pair=${PAIR}; live=${LIVE_TRADING}`));
 tick();setInterval(tick,POLL_MS);
