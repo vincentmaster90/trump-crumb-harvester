@@ -1,0 +1,36 @@
+const http=require('http'),crypto=require('crypto'),fs=require('fs'),path=require('path');
+const PORT=Number(process.env.PORT||3000);
+const API_KEY=process.env.KRAKEN_API_KEY||'';
+const API_SECRET=process.env.KRAKEN_API_SECRET||'';
+const PAIR=process.env.KRAKEN_PAIR||'WIFUSD';
+const CAPITAL_USD=Number(process.env.CAPITAL_USD||100);
+const TARGET_PCT=Number(process.env.TARGET_PCT||1);
+const POLL_MS=Math.max(10000,Number(process.env.POLL_MS||15000));
+const LIVE_TRADING=String(process.env.LIVE_TRADING||'false').toLowerCase()==='true';
+const STATE_FILE=process.env.STATE_FILE||path.join(__dirname,'live-state.json');
+
+function fresh(){return{version:1,pair:PAIR,capitalUsd:CAPITAL_USD,targetPct:TARGET_PCT,status:'WAITING_FOR_FUNDING',entryPrice:null,entryVolume:0,remainingVolume:0,pendingProfitUsd:0,harvestedProfitUsd:0,safeToWithdrawUsd:0,withdrawnProfitUsd:0,harvestCount:0,lastPrice:null,lastUpdated:null,lastOrder:null,lastError:null,armed:LIVE_TRADING};}
+function load(){try{if(fs.existsSync(STATE_FILE))return{...fresh(),...JSON.parse(fs.readFileSync(STATE_FILE,'utf8'))};}catch{}return fresh();}
+let state=load();
+function save(){fs.writeFileSync(STATE_FILE,JSON.stringify(state,null,2));}
+function nonce(){return String(Date.now()*1000+Math.floor(Math.random()*1000));}
+async function publicCall(method,params={}){const q=new URLSearchParams(params).toString();const r=await fetch(`https://api.kraken.com/0/public/${method}${q?'?'+q:''}`);const j=await r.json();if(!r.ok||j.error?.length)throw new Error(j.error?.join(', ')||`HTTP ${r.status}`);return j.result;}
+async function privateCall(method,params={}){if(!API_KEY||!API_SECRET)throw new Error('Kraken API credentials missing');const n=nonce(),body=new URLSearchParams({nonce:n,...params}).toString(),urlPath=`/0/private/${method}`;const hash=crypto.createHash('sha256').update(n+body).digest();const sig=crypto.createHmac('sha512',Buffer.from(API_SECRET,'base64')).update(Buffer.concat([Buffer.from(urlPath),hash])).digest('base64');const r=await fetch(`https://api.kraken.com${urlPath}`,{method:'POST',headers:{'API-Key':API_KEY,'API-Sign':sig,'Content-Type':'application/x-www-form-urlencoded'},body});const j=await r.json();if(!r.ok||j.error?.length)throw new Error(j.error?.join(', ')||`HTTP ${r.status}`);return j.result;}
+async function pairInfo(){const result=await publicCall('AssetPairs',{pair:PAIR});const [key,v]=Object.entries(result)[0]||[];if(!v)throw new Error('Pair info missing');return{key,ordermin:Number(v.ordermin||0),lotDecimals:Number(v.lot_decimals||8),pairDecimals:Number(v.pair_decimals||8),base:v.base,quote:v.quote};}
+async function ticker(){const result=await publicCall('Ticker',{pair:PAIR});const v=Object.values(result)[0];const p=Number(v?.c?.[0]);if(!p)throw new Error('Price missing');return p;}
+const floor=(x,d)=>Math.floor(x*10**d)/10**d;
+async function addOrder({type,volume,price}){if(!LIVE_TRADING)throw new Error('LIVE_TRADING is false');const p={ordertype:price?'limit':'market',type,pair:PAIR,volume:String(volume)};if(price)p.price=String(price);return privateCall('AddOrder',p);}
+async function queryOrder(txid){const r=await privateCall('QueryOrders',{txid});return r?.[txid]||Object.values(r||{})[0]||null;}
+async function waitClosed(txid,timeoutMs=60000){const end=Date.now()+timeoutMs;while(Date.now()<end){const o=await queryOrder(txid);if(o&&['closed','canceled','expired'].includes(o.status))return o;await new Promise(r=>setTimeout(r,2500));}return queryOrder(txid);}
+async function ensureEntry(info,price){if(state.entryPrice&&state.remainingVolume>0)return;if(!LIVE_TRADING){state.status='READY_NOT_ARMED';return;}const volume=floor(CAPITAL_USD/price,info.lotDecimals);if(volume<info.ordermin)throw new Error(`Entry volume ${volume} below ordermin ${info.ordermin}`);state.status='BUYING_ENTRY';save();const add=await addOrder({type:'buy',volume});const txid=add?.txid?.[0];if(!txid)throw new Error('Buy order txid missing');const o=await waitClosed(txid);if(!o||o.status!=='closed')throw new Error(`Entry order not closed (${o?.status||'unknown'})`);const filled=Number(o.vol_exec||0),cost=Number(o.cost||0),fee=Number(o.fee||0);if(!filled||!cost)throw new Error('Entry fill missing');state.entryPrice=cost/filled;state.entryVolume=filled;state.remainingVolume=filled;state.capitalUsd=cost+fee;state.status='RUNNING';state.lastOrder={side:'buy',txid,status:o.status,filled,cost,fee,time:new Date().toISOString()};save();}
+async function evaluate(info,price){state.lastPrice=price;state.lastUpdated=new Date().toISOString();await ensureEntry(info,price);if(!state.entryPrice||state.remainingVolume<=0)return;const target=state.entryPrice*(1+state.targetPct/100);const positionValue=state.remainingVolume*price;const grossExcess=Math.max(0,positionValue-state.capitalUsd);state.pendingProfitUsd=grossExcess;
+if(price<target){state.status=LIVE_TRADING?'RUNNING':'READY_NOT_ARMED';return;}
+let sellVolume=floor(grossExcess/price,info.lotDecimals);if(sellVolume<info.ordermin){state.status='TARGET_HIT_PENDING_MINIMUM';return;}
+if(!LIVE_TRADING){state.status='TARGET_HIT_NOT_ARMED';return;}
+state.status='SELLING_PROFIT';save();const add=await addOrder({type:'sell',volume:sellVolume});const txid=add?.txid?.[0];if(!txid)throw new Error('Sell order txid missing');const o=await waitClosed(txid);if(!o||o.status!=='closed')throw new Error(`Profit sell not closed (${o?.status||'unknown'})`);const filled=Number(o.vol_exec||0),cost=Number(o.cost||0),fee=Number(o.fee||0),net=Math.max(0,cost-fee);state.remainingVolume=Math.max(0,state.remainingVolume-filled);state.harvestedProfitUsd+=net;state.safeToWithdrawUsd+=net;state.harvestCount++;state.pendingProfitUsd=0;state.entryPrice=price;state.capitalUsd=state.remainingVolume*price;state.status='RUNNING';state.lastOrder={side:'sell-profit',txid,status:o.status,filled,cost,fee,net,time:new Date().toISOString()};save();}
+async function tick(){try{const [info,price]=await Promise.all([pairInfo(),ticker()]);await evaluate(info,price);state.lastError=null;save();}catch(e){state.lastError=e.message;state.status='ERROR';save();console.error(e.message);}}
+function view(){const targetPrice=state.entryPrice?state.entryPrice*(1+state.targetPct/100):null;return{...state,targetPrice,positionValueUsd:state.remainingVolume&&state.lastPrice?state.remainingVolume*state.lastPrice:0,credentialsConfigured:Boolean(API_KEY&&API_SECRET),liveTrading:LIVE_TRADING};}
+function send(res,code,obj,type='application/json; charset=utf-8'){const body=type.startsWith('application/json')?JSON.stringify(obj):obj;res.writeHead(code,{'content-type':type,'cache-control':'no-store'});res.end(body);}
+const server=http.createServer((req,res)=>{const u=new URL(req.url,`http://${req.headers.host}`);if(u.pathname==='/api/state')return send(res,200,view());if(u.pathname==='/api/health')return send(res,200,{ok:true,status:state.status,lastError:state.lastError});if(u.pathname==='/'){return fs.readFile(path.join(__dirname,'index.html'),'utf8',(e,d)=>e?send(res,500,'Error','text/plain'):send(res,200,d,'text/html; charset=utf-8'));}send(res,404,{error:'Not found'});});
+server.listen(PORT,()=>console.log(`Kraken WIF live pilot listening on ${PORT}; live=${LIVE_TRADING}`));
+tick();setInterval(tick,POLL_MS);
