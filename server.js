@@ -8,10 +8,9 @@ const POLL_MS = Math.max(5000, Number(process.env.POLL_MS || 15000));
 
 const ASSETS = {
   TRUMP: { pair: 'TRUMPUSD', label: 'TRUMP / USD' },
-  SOL: { pair: 'SOLUSD', label: 'SOL / USD' },
-  BTC: { pair: 'XBTUSD', label: 'BTC / USD' },
-  ETH: { pair: 'ETHUSD', label: 'ETH / USD' },
-  PAXG: { pair: 'PAXGUSD', label: 'PAXG / USD' }
+  WIF: { pair: 'WIFUSD', label: 'WIF / USD' },
+  PENGU: { pair: 'PENGUUSD', label: 'PENGU / USD' },
+  BONK: { pair: 'BONKUSD', label: 'BONK / USD' }
 };
 
 function freshBot(symbol) {
@@ -214,6 +213,6 @@ const server = http.createServer(async (req, res) => {
   }
 });
 
-server.listen(PORT, () => console.log(`Multi Crumb Harvester listening on ${PORT}`));
+server.listen(PORT, () => console.log(`Volatile Crumb Harvester listening on ${PORT}`));
 fetchAll();
 setInterval(fetchAll, POLL_MS);
