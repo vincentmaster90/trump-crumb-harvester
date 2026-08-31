@@ -61,6 +61,14 @@ button:disabled{opacity:.5;cursor:not-allowed}
 .formula{margin-top:18px;padding:14px;background:#0e1217;border:1px dashed var(--line);border-radius:12px}
 .formula p{margin:6px 0 0;color:var(--muted);line-height:1.5}
 .log-panel{margin-top:14px}
+.strategy-table-wrap{margin-top:16px}
+.strategy-strip{margin-top:14px;padding:14px 16px;background:#0e1217;border:1px solid var(--line);border-radius:14px;display:grid;grid-template-columns:auto auto 1fr;gap:10px;align-items:center}
+.strategy-strip span{color:var(--muted);font-size:.8rem;font-weight:800;text-transform:uppercase;letter-spacing:.06em}
+.strategy-strip strong{font-size:1rem}
+.strategy-strip small{color:var(--muted);text-align:right}
+.winner-pill{display:inline-flex;align-items:center;justify-content:center;min-width:62px;border:1px solid var(--line);border-radius:999px;padding:5px 9px;font-size:.75rem;font-weight:900;letter-spacing:.06em}
+.winner-pill.positive{border-color:rgba(53,208,127,.45);background:rgba(53,208,127,.08)}
+.winner-pill.negative{border-color:rgba(255,93,104,.35);background:rgba(255,93,104,.06)}
 .table-wrap{overflow:auto}
 table{width:100%;border-collapse:collapse;min-width:800px}
 th,td{padding:12px 10px;border-bottom:1px solid var(--line);text-align:right;font-size:.9rem}
@@ -82,7 +90,7 @@ th{color:var(--muted);font-size:.78rem;text-transform:uppercase;letter-spacing:.
 .modal-table{min-width:760px}
 .modal-table th,.modal-table td{padding:13px 12px}
 footer{color:var(--muted);text-align:center;font-size:.82rem;line-height:1.5;padding:22px 10px 0}
-@media(max-width:900px){.stats{grid-template-columns:repeat(2,1fr)}.two{grid-template-columns:1fr}.hero{flex-direction:column}.status-wrap{align-self:flex-start}}
+@media(max-width:900px){.stats{grid-template-columns:repeat(2,1fr)}.two{grid-template-columns:1fr}.hero{flex-direction:column}.status-wrap{align-self:flex-start}.strategy-strip{grid-template-columns:1fr auto}.strategy-strip small{grid-column:1/-1;text-align:left}}
 @media(max-width:560px){
   .shell{width:min(94vw,1180px);padding-top:22px}.stats{grid-template-columns:1fr}.button-row{flex-direction:column}.card strong{font-size:1.5rem}.back-to-top{right:14px;bottom:14px;width:48px;height:48px}
   .modal-overlay{padding:10px}.harvest-modal{padding:14px;border-radius:18px;max-height:88vh}.modal-head{gap:10px}.modal-head h2{font-size:1.25rem}.modal-close{width:40px;height:40px}.modal-note{font-size:.76rem}
