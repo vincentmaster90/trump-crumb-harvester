@@ -7,7 +7,7 @@ const STATE_FILE = process.env.STATE_FILE || path.join(__dirname, 'paper-state.j
 const POLL_MS = Math.max(5000, Number(process.env.POLL_MS || 15000));
 
 const ASSETS = {
-  TRUMP: { pair: 'TRUMPUSD', label: 'TRUMP / USD' },
+  XMR: { pair: 'XMRUSD', label: 'XMR / USD' },
   SOL: { pair: 'SOLUSD', label: 'SOL / USD' },
   BTC: { pair: 'XBTUSD', label: 'BTC / USD' },
   ETH: { pair: 'ETHUSD', label: 'ETH / USD' },
@@ -45,8 +45,6 @@ function loadState() {
         for (const s of Object.keys(ASSETS)) bots[s] = { ...freshBot(s), ...(saved.bots[s] || {}) };
         return { bots };
       }
-      const trump = { ...freshBot('TRUMP'), ...saved, symbol: 'TRUMP', pair: ASSETS.TRUMP.pair, label: ASSETS.TRUMP.label };
-      return { bots: { ...defaults.bots, TRUMP: trump } };
     }
   } catch (e) {
     console.error('State load failed:', e.message);
