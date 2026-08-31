@@ -3,8 +3,8 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>15 Bot Harvest Lab</title>
-  <meta name="description" content="Fifteen independent Kraken paper bots comparing 0.5%, 1% and 2% harvest targets." />
+  <title>70 Bot Harvest Lab</title>
+  <meta name="description" content="Seventy Kraken paper bots testing 10 assets across seven harvest targets." />
   <link rel="stylesheet" href="styles.css" />
 </head>
 <body>
@@ -12,24 +12,16 @@
     <header class="hero">
       <div>
         <p class="eyebrow">KRAKEN PAPER TEST • 24/7</p>
-        <h1>15 Bot Harvest Lab</h1>
-        <p class="sub">TRUMP, SOL, BTC, DOGE and WIF — each tested at 0.5%, 1% and 2% in parallel.</p>
+        <h1>70 Bot Harvest Lab</h1>
+        <p class="sub">10 assets × 7 harvest targets • $1,000 virtual capital per test.</p>
       </div>
-      <div class="status-wrap">
-        <span id="liveDot" class="dot"></span>
-        <span id="liveStatus">Connecting to Kraken…</span>
-      </div>
+      <div class="status-wrap"><span id="liveDot" class="dot"></span><span id="liveStatus">Connecting to Kraken…</span></div>
     </header>
 
     <section class="panel">
-      <div class="panel-head">
-        <div>
-          <p class="eyebrow">All 15 bots combined</p>
-          <h2>Experiment total</h2>
-        </div>
-      </div>
+      <div class="panel-head"><div><p class="eyebrow">All 70 tests combined</p><h2>Experiment total</h2></div></div>
       <div class="grid stats">
-        <article class="card"><span>Total base capital</span><strong id="totalCapital">$0.00</strong><small>$1,000 per virtual bot</small></article>
+        <article class="card"><span>Total base capital</span><strong id="totalCapital">$70,000.00</strong><small>$1,000 per virtual bot</small></article>
         <article class="card profit"><span>Total banked profit</span><strong id="totalBanked">$0.00</strong><small id="totalHarvests">0 harvests</small></article>
         <article class="card accent"><span>Total current positions</span><strong id="totalPositions">$0.00</strong><small>Live market value</small></article>
         <article class="card"><span>Total wealth</span><strong id="totalWealth">$0.00</strong><small id="totalPnL">$0.00 vs base</small></article>
@@ -37,41 +29,18 @@
     </section>
 
     <section class="panel log-panel">
-      <div class="panel-head">
-        <div>
-          <p class="eyebrow">Best target right now</p>
-          <h2>Current winners by asset</h2>
-        </div>
-      </div>
-      <div class="table-wrap">
-        <table>
-          <thead><tr><th>Asset</th><th>Best target</th><th>Harvests</th><th>Banked profit</th><th>Net result</th></tr></thead>
-          <tbody id="winnerBody"></tbody>
-        </table>
-      </div>
+      <div class="panel-head"><div><p class="eyebrow">Best target right now</p><h2>Current winners by asset</h2></div></div>
+      <div class="table-wrap"><table><thead><tr><th>Asset</th><th>Best target</th><th>Harvests</th><th>Banked profit</th><th>Net result</th></tr></thead><tbody id="winnerBody"></tbody></table></div>
     </section>
 
     <section class="panel log-panel">
-      <div class="panel-head">
-        <div>
-          <p class="eyebrow">0.5% vs 1% vs 2%</p>
-          <h2>Live scoreboard</h2>
-        </div>
-        <button id="refreshBtn" class="secondary small">Refresh now</button>
-      </div>
-      <div class="table-wrap">
-        <table>
-          <thead><tr><th>Asset</th><th>Target</th><th>Price</th><th>Capital</th><th>Cycle move</th><th>Harvests</th><th>Banked profit</th><th>Unrealized</th><th>Net result</th><th>Total wealth</th></tr></thead>
-          <tbody id="scoreBody"></tbody>
-        </table>
-      </div>
+      <div class="panel-head"><div><p class="eyebrow">0.05% • 0.1% • 0.15% • 0.2% • 0.5% • 1% • 2%</p><h2>Live scoreboard</h2></div><button id="refreshBtn" class="secondary small">Refresh now</button></div>
+      <div class="table-wrap"><table><thead><tr><th>Asset</th><th>Target</th><th>Price</th><th>Capital</th><th>Cycle move</th><th>Harvests</th><th>Banked profit</th><th>Unrealized</th><th>Net result</th><th>Total wealth</th></tr></thead><tbody id="scoreBody"></tbody></table></div>
     </section>
 
     <section id="botsGrid" class="grid two"></section>
 
-    <footer>
-      Paper simulator only. No real Kraken orders. This lab compares target thresholds using the same live market feed and the same virtual base capital.
-    </footer>
+    <footer>Paper simulator only. No real Kraken orders. Fees and slippage are currently excluded so this experiment measures raw harvest frequency; very small targets may not be profitable after real trading costs.</footer>
   </main>
   <script src="app.js"></script>
 </body>
