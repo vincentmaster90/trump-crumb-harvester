@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
 <meta name="theme-color" content="#07111d">
-<title>PUMP Live Trading Terminal</title>
+<title>HNT Live Trading Terminal</title>
 <style>
 :root{--bg:#05080d;--panel:#0a111b;--blue:#2f80ed;--blue2:#64b5ff;--blue3:#0d2a47;--green:#16f07a;--green2:#7dffb8;--red:#ff3b4f;--red2:#ff7a88;--gold:#ffc857;--white:#f7fbff;--dim:#94a9bb;--line:#1d3550}
 *{box-sizing:border-box}body{margin:0;min-height:100vh;color:var(--white);font-family:Inter,system-ui,-apple-system,Segoe UI,sans-serif;background:linear-gradient(180deg,#07111d 0,#060b12 45%,#07111d 100%);padding:16px}.wrap{max-width:920px;margin:auto}.top{display:flex;align-items:center;justify-content:space-between;gap:12px;margin:6px 0 16px}.brand{font-size:clamp(26px,8vw,48px);font-weight:950;letter-spacing:-2px}.brand .p{color:var(--blue2)}.brand .l{color:#fff}.livepill{display:flex;align-items:center;gap:8px;padding:9px 13px;border-radius:999px;border:1px solid #2c7649;background:#0c2014;color:var(--green2);font-weight:900;font-size:12px;box-shadow:0 0 24px rgba(22,240,122,.12)}.dot{width:9px;height:9px;border-radius:50%;background:var(--green);box-shadow:0 0 12px var(--green)}
@@ -15,16 +15,16 @@
 </style>
 </head>
 <body><div class="wrap">
-<div class="top"><div class="brand"><span class="p">PUMP</span> <span class="l">LIVE</span></div><div class="livepill"><span class="dot"></span><span id="liveText">CONNECTING</span></div></div>
+<div class="top"><div class="brand"><span class="p">HNT</span> <span class="l">LIVE</span></div><div class="livepill"><span class="dot"></span><span id="liveText">CONNECTING</span></div></div>
 <section class="hero">
-<div class="heroTop"><div><div class="symbol" id="pair">PUMPUSD</div><div class="price" id="price">—</div><div class="sub">KRAKEN · LIVE MARKET</div></div><div><div class="status" id="status">Loading…</div><div class="sub" id="updated">waiting for data</div></div></div>
+<div class="heroTop"><div><div class="symbol" id="pair">HNTUSD</div><div class="price" id="price">—</div><div class="sub">KRAKEN · LIVE MARKET</div></div><div><div class="status" id="status">Loading…</div><div class="sub" id="updated">waiting for data</div></div></div>
 <div class="tickerStrip"><div class="chip green">BUY ENGINE</div><div class="chip red">SELL HARVEST</div><div class="chip">TARGET <span id="targetChip">—</span></div></div>
 <svg class="spark" viewBox="0 0 600 82" preserveAspectRatio="none"><polyline id="sparkline" points="0,58 600,58"/></svg>
 <div class="progressBox"><div class="progressMeta"><span>PROGRESS TO NEXT HARVEST</span><span id="progressText">0.00%</span></div><div class="track"><div class="bar" id="bar"></div></div></div><div id="error" class="err"></div>
 </section>
 <div class="grid">
 <div class="card capital"><div class="label">YOUR CAPITAL</div><div class="value" id="capital">—</div><div class="sub">strategy basis</div></div>
-<div class="card working"><div class="label">CAPITAL WORKING</div><div class="value" id="working">—</div><div class="sub">currently in PUMP</div></div>
+<div class="card working"><div class="label">CAPITAL WORKING</div><div class="value" id="working">—</div><div class="sub">currently in HNT</div></div>
 <div class="card pending neutral" id="pendingCard"><div class="label">PENDING PROFIT / LOSS</div><div class="value" id="pending">—</div><div class="sub">live, still in the market</div></div>
 <div class="card safe"><div class="label">SAFE TO WITHDRAW</div><div class="value" id="safe">—</div><div class="sub">realized cash</div></div>
 </div>
@@ -34,10 +34,10 @@
 <div class="row"><span class="k">Harvests</span><span class="v armed" id="harvests">0</span></div>
 <div class="row"><span class="k">Kraken API</span><span class="v" id="api">—</span></div>
 <div class="row"><span class="k">Live trading</span><span class="v" id="live">—</span></div>
-</section><div class="foot">PUMP LIVE TRADING TERMINAL · AUTO REFRESH 5S</div></div>
+</section><div class="foot">HNT LIVE TRADING TERMINAL · AUTO REFRESH 5S</div></div>
 <script>
 const prices=[];const money=x=>'$'+Number(x||0).toFixed(2);const signedMoney=x=>{const n=Number(x||0);if(Math.abs(n)<0.005)return '$0.00';return (n>0?'+':'-')+'$'+Math.abs(n).toFixed(2)};const px=x=>{const n=Number(x);if(!n)return '—';return '$'+(n>=1?n.toFixed(4):n>=.01?n.toFixed(5):n.toFixed(7));};
 function drawSpark(n){if(!n)return;prices.push(n);if(prices.length>50)prices.shift();if(prices.length<2)return;const min=Math.min(...prices),max=Math.max(...prices),range=(max-min)||1;const pts=prices.map((p,i)=>`${i/(prices.length-1)*600},${72-(p-min)/range*62}`).join(' ');sparkline.setAttribute('points',pts)}
-async function refresh(){try{const r=await fetch('/api/state?ts='+Date.now(),{cache:'no-store'});if(!r.ok)throw new Error('HTTP '+r.status);const s=await r.json();status.textContent=String(s.status||'UNKNOWN').replaceAll('_',' ');pair.textContent=s.pair||'PUMPUSD';price.textContent=px(s.lastPrice);capital.textContent=money(s.capitalUsd);working.textContent=money(s.positionValueUsd);const pnl=Number(s.positionValueUsd||0)-Number(s.capitalUsd||0);pending.textContent=signedMoney(pnl);pendingCard.classList.remove('positive','negative','neutral');pendingCard.classList.add(pnl>0.004?'positive':pnl<-0.004?'negative':'neutral');safe.textContent=money(s.safeToWithdrawUsd);target.textContent=Number(s.targetPct||0).toFixed(2)+'%';targetChip.textContent=target.textContent;targetPrice.textContent=px(s.targetPrice);harvests.textContent=s.harvestCount||0;api.textContent=s.credentialsConfigured?'CONNECTED':'NOT CONNECTED';api.className='v '+(s.credentialsConfigured?'armed':'danger');live.textContent=s.liveTrading?'ARMED':'OFF';live.className='v '+(s.liveTrading?'armed':'off');liveText.textContent=s.liveTrading?'LIVE / ARMED':'MONITOR ONLY';updated.textContent='updated '+new Date().toLocaleTimeString([], {hour:'2-digit',minute:'2-digit',second:'2-digit'});error.style.display=s.lastError?'block':'none';error.textContent=s.lastError||'';const p=Number(s.lastPrice),e=Number(s.entryPrice),t=Number(s.targetPrice),tp=Number(s.targetPct||0);let a=0;if(p&&e&&t>e)a=Math.max(0,Math.min(100,(p-e)/(t-e)*100));bar.style.width=a+'%';progressText.textContent=(tp*a/100).toFixed(2)+'% / '+tp.toFixed(2)+'%';drawSpark(p)}catch(e){status.textContent='OFFLINE';liveText.textContent='DISCONNECTED';error.style.display='block';error.textContent=e.message}}
+async function refresh(){try{const r=await fetch('/api/state?ts='+Date.now(),{cache:'no-store'});if(!r.ok)throw new Error('HTTP '+r.status);const s=await r.json();status.textContent=String(s.status||'UNKNOWN').replaceAll('_',' ');pair.textContent=s.pair||'HNTUSD';price.textContent=px(s.lastPrice);capital.textContent=money(s.capitalUsd);working.textContent=money(s.positionValueUsd);const pnl=Number(s.positionValueUsd||0)-Number(s.capitalUsd||0);pending.textContent=signedMoney(pnl);pendingCard.classList.remove('positive','negative','neutral');pendingCard.classList.add(pnl>0.004?'positive':pnl<-0.004?'negative':'neutral');safe.textContent=money(s.safeToWithdrawUsd);target.textContent=Number(s.targetPct||0).toFixed(2)+'%';targetChip.textContent=target.textContent;targetPrice.textContent=px(s.targetPrice);harvests.textContent=s.harvestCount||0;api.textContent=s.credentialsConfigured?'CONNECTED':'NOT CONNECTED';api.className='v '+(s.credentialsConfigured?'armed':'danger');live.textContent=s.liveTrading?'ARMED':'OFF';live.className='v '+(s.liveTrading?'armed':'off');liveText.textContent=s.liveTrading?'LIVE / ARMED':'MONITOR ONLY';updated.textContent='updated '+new Date().toLocaleTimeString([], {hour:'2-digit',minute:'2-digit',second:'2-digit'});error.style.display=s.lastError?'block':'none';error.textContent=s.lastError||'';const p=Number(s.lastPrice),e=Number(s.entryPrice),t=Number(s.targetPrice),tp=Number(s.targetPct||0);let a=0;if(p&&e&&t>e)a=Math.max(0,Math.min(100,(p-e)/(t-e)*100));bar.style.width=a+'%';progressText.textContent=(tp*a/100).toFixed(2)+'% / '+tp.toFixed(2)+'%';drawSpark(p)}catch(e){status.textContent='OFFLINE';liveText.textContent='DISCONNECTED';error.style.display='block';error.textContent=e.message}}
 refresh();setInterval(refresh,5000);
 </script></body></html>
