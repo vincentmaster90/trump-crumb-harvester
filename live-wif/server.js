@@ -1,4 +1,5 @@
 // Deployment touch: dashboard refresh only; trading logic unchanged.
+// Trigger Railway watch for live-wif dashboard update.
 const http=require('http'),crypto=require('crypto'),fs=require('fs'),path=require('path');
 const PORT=Number(process.env.PORT||3000);
 const API_KEY=process.env.KRAKEN_API_KEY||'';
