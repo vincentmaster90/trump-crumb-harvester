@@ -2,12 +2,12 @@ const http=require('http'),crypto=require('crypto'),fs=require('fs'),path=requir
 const PORT=Number(process.env.PORT||3000);
 const API_KEY=process.env.KRAKEN_API_KEY||'';
 const API_SECRET=process.env.KRAKEN_API_SECRET||'';
-const PAIR=process.env.KRAKEN_PAIR||'WIFUSD';
-const CAPITAL_USD=Number(process.env.CAPITAL_USD||100);
-const TARGET_PCT=Number(process.env.TARGET_PCT||1);
+const PAIR=process.env.KRAKEN_PAIR||'HNTUSD';
+const CAPITAL_USD=Number(process.env.CAPITAL_USD||80);
+const TARGET_PCT=Number(process.env.TARGET_PCT||2);
 const POLL_MS=Math.max(10000,Number(process.env.POLL_MS||15000));
 const LIVE_TRADING=String(process.env.LIVE_TRADING||'false').toLowerCase()==='true';
-const STATE_FILE=process.env.STATE_FILE||path.join(__dirname,'live-state.json');
+const STATE_FILE=process.env.STATE_FILE||path.join(__dirname,'hnt-live-state.json');
 
 function fresh(){return{version:1,pair:PAIR,capitalUsd:CAPITAL_USD,targetPct:TARGET_PCT,status:'WAITING_FOR_FUNDING',entryPrice:null,entryVolume:0,remainingVolume:0,pendingProfitUsd:0,harvestedProfitUsd:0,safeToWithdrawUsd:0,withdrawnProfitUsd:0,harvestCount:0,lastPrice:null,lastUpdated:null,lastOrder:null,lastError:null,armed:LIVE_TRADING};}
 function load(){try{if(fs.existsSync(STATE_FILE)){const saved=JSON.parse(fs.readFileSync(STATE_FILE,'utf8'));if(saved.pair&&saved.pair!==PAIR){if(Number(saved.remainingVolume||0)>0||saved.entryPrice)throw new Error(`Refusing pair change with open position: ${saved.pair} -> ${PAIR}`);return fresh();}return{...fresh(),...saved,pair:PAIR,capitalUsd:Number(saved.capitalUsd||CAPITAL_USD),targetPct:TARGET_PCT,armed:LIVE_TRADING};}}catch(e){if(String(e.message||'').startsWith('Refusing pair change'))throw e;}return fresh();}
