@@ -1,0 +1,9 @@
+{
+  "name": "meme-harvest-70-lab",
+  "version": "1.0.0",
+  "private": true,
+  "description": "70-bot paper trading comparison lab for 10 meme/high-volatility tokens",
+  "main": "server.js",
+  "scripts": {"start": "node server.js"},
+  "engines": {"node": ">=18"}
+}
